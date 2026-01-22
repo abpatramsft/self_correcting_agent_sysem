@@ -628,16 +628,18 @@ function App() {
             </div>
           </div>
           {logSectionOpen && (
-          <div className="log-container" ref={logContainerRef}>
+          <div className="log-container timeline" ref={logContainerRef}>
             {filteredEvents.length === 0 && !isLoading && !isStreamingMessage && (
               <div className="empty-state">
                 <div className="empty-icon">📭</div>
                 <p>No events yet. Enter a query to start the workflow.</p>
               </div>
             )}
+            <div className="timeline-track">
             {filteredEvents.map((event, index) => {
               const isLongContent = event.type === 'message_content' && event.data.text && event.data.text.length > 200
               const isExpanded = expandedLogs.has(index)
+              const isInlineEvent = event.type === 'action_started' || event.type === 'action_completed' || event.type === 'response_status'
               const toggleExpand = (e) => {
                 e.stopPropagation()
                 setExpandedLogs(prev => {
@@ -651,68 +653,102 @@ function App() {
                 })
               }
               
+              // Inline timeline entry for short status messages
+              if (isInlineEvent) {
+                return (
+                  <div key={index} className={`timeline-entry inline ${getEventClass(event.type)}`}>
+                    <div className="timeline-dot-wrapper">
+                      <div className={`timeline-dot ${event.type === 'action_completed' ? 'completed' : event.type === 'action_started' ? 'started' : 'status'}`}>
+                        {getEventIcon(event.type)}
+                      </div>
+                    </div>
+                    <div className="timeline-inline-content">
+                      {event.nodeId && (
+                        <span className="timeline-node-badge">{WORKFLOW_NODES[event.nodeId]?.name}</span>
+                      )}
+                      <span className="timeline-text">{formatEventData(event.type, event.data)}</span>
+                      <span className="timeline-time">{event.timestamp.toLocaleTimeString()}</span>
+                    </div>
+                  </div>
+                )
+              }
+              
+              // Full card entry for message content
               return (
               <div 
                 key={index} 
-                className={`log-entry ${getEventClass(event.type)} ${isLongContent ? 'collapsible' : ''} ${isLongContent && !isExpanded ? 'collapsed' : ''}`}
+                className={`timeline-entry card ${getEventClass(event.type)} ${isLongContent ? 'collapsible' : ''} ${isLongContent && !isExpanded ? 'collapsed' : ''}`}
               >
-                <div className="log-header" onClick={isLongContent ? toggleExpand : undefined}>
-                  <span className="log-icon">{getEventIcon(event.type)}</span>
-                  {event.nodeId && (
-                    <span className="log-node-badge">{WORKFLOW_NODES[event.nodeId]?.name}</span>
-                  )}
-                  <span className="log-time">
-                    {event.timestamp.toLocaleTimeString()}
-                  </span>
-                  {isLongContent && (
-                    <span className={`log-expand-btn ${isExpanded ? 'expanded' : ''}`}>
-                      {isExpanded ? '▲ Collapse' : '▼ Expand'}
-                    </span>
-                  )}
+                <div className="timeline-dot-wrapper">
+                  <div className="timeline-dot content">
+                    {getEventIcon(event.type)}
+                  </div>
                 </div>
-                {event.type === 'message_content' ? (
-                  <div className={`log-content message-json ${isLongContent && !isExpanded ? 'truncated' : ''}`}>
+                <div className="timeline-card">
+                  <div className="timeline-card-header" onClick={isLongContent ? toggleExpand : undefined}>
+                    {event.nodeId && (
+                      <span className="timeline-node-badge">{WORKFLOW_NODES[event.nodeId]?.name}</span>
+                    )}
+                    <span className="timeline-time">
+                      {event.timestamp.toLocaleTimeString()}
+                    </span>
+                    {isLongContent && (
+                      <span className={`log-expand-btn ${isExpanded ? 'expanded' : ''}`}>
+                        {isExpanded ? '▲ Collapse' : '▼ Expand'}
+                      </span>
+                    )}
+                  </div>
+                  <div className={`timeline-card-content ${isLongContent && !isExpanded ? 'truncated' : ''}`}>
                     {isJsonContent(event.data.text) ? (
                       <pre className="json-block">{formatJsonContent(event.data.text)}</pre>
                     ) : (
                       <div className="text-block">{event.data.text}</div>
                     )}
                   </div>
-                ) : (
-                  <div className="log-content">
-                    {formatEventData(event.type, event.data)}
-                  </div>
-                )}
+                </div>
               </div>
               )
             })}
             {isStreamingMessage && currentMessageText && (
-              <div className="log-entry event-message-content streaming">
-                <div className="log-header">
-                  <span className="log-icon">📄</span>
-                  {activeNode && (
-                    <span className="log-node-badge">{WORKFLOW_NODES[activeNode]?.name}</span>
-                  )}
-                  <span className="log-time">{new Date().toLocaleTimeString()}</span>
+              <div className="timeline-entry card event-message-content streaming">
+                <div className="timeline-dot-wrapper">
+                  <div className="timeline-dot content streaming">
+                    📄
+                  </div>
                 </div>
-                <div className="log-content message-json">
-                  {isJsonContent(currentMessageText) ? (
-                    <pre className="json-block">{formatJsonContent(currentMessageText)}</pre>
-                  ) : (
-                    <div className="text-block">
-                      {currentMessageText}
-                      <span className="cursor">▊</span>
-                    </div>
-                  )}
+                <div className="timeline-card">
+                  <div className="timeline-card-header">
+                    {activeNode && (
+                      <span className="timeline-node-badge">{WORKFLOW_NODES[activeNode]?.name}</span>
+                    )}
+                    <span className="timeline-time">{new Date().toLocaleTimeString()}</span>
+                  </div>
+                  <div className="timeline-card-content">
+                    {isJsonContent(currentMessageText) ? (
+                      <pre className="json-block">{formatJsonContent(currentMessageText)}</pre>
+                    ) : (
+                      <div className="text-block">
+                        {currentMessageText}
+                        <span className="cursor">▊</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
             {isLoading && !isStreamingMessage && (
-              <div className="log-entry event-loading">
-                <span className="log-icon">⏳</span>
-                <span className="log-content">Processing...</span>
+              <div className="timeline-entry inline event-loading">
+                <div className="timeline-dot-wrapper">
+                  <div className="timeline-dot loading">
+                    ⏳
+                  </div>
+                </div>
+                <div className="timeline-inline-content">
+                  <span className="timeline-text">Processing...</span>
+                </div>
               </div>
             )}
+            </div>
           </div>
           )}
         </section>
